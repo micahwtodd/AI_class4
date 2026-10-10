@@ -4,7 +4,12 @@ import World from './World.jsx'
 import Player from './Player.jsx'
 import Minimap from './Minimap.jsx'
 import TouchControls from './TouchControls.jsx'
+import ChatPanel from './ChatPanel.jsx'
+import { ZAMAN } from './Zaman.jsx'
+import { chat } from './chat.js'
 import { EYE, SPAWN } from './layout.js'
+
+const PROFS = { [ZAMAN.id]: ZAMAN }
 
 export default function App() {
   const [locked, setLocked] = useState(false)
@@ -24,8 +29,29 @@ export default function App() {
     setTouchOn(on)
   }
   const playing = locked || touchOn
+
+  // chatting with a professor: free the mouse (or pause the joystick) so you can type
+  const [chatWith, setChatWith] = useState(null)
+  const [aimed, setAimed] = useState(null)
   useEffect(() => {
-    const k = (e) => e.code === 'KeyM' && setShowMap((v) => !v)
+    chat.onAim = setAimed
+    chat.onOpen = (id) => {
+      chat.with = id
+      setChatWith(id)
+      touchRef.current.active = false
+      touchRef.current.move = [0, 0]
+      document.exitPointerLock?.()
+    }
+  }, [])
+  const closeChat = useCallback(() => {
+    chat.with = null
+    setChatWith(null)
+    if (touchOn) touchRef.current.active = true
+    else lockRef.current?.() // back to walking (if the browser allows re-locking right away)
+  }, [touchOn])
+
+  useEffect(() => {
+    const k = (e) => e.code === 'KeyM' && !e.target.closest?.('input, textarea') && setShowMap((v) => !v)
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [])
@@ -50,10 +76,16 @@ export default function App() {
       <button className="maptoggle" onClick={() => setShowMap((s) => !s)}>
         {showMap ? 'hide map' : 'map'}
       </button>
-      {playing && <div className="crosshair" />}
-      {touchOn && <TouchControls touchRef={touchRef} onPause={() => setTouch(false)} />}
+      {playing && !chatWith && <div className={aimed ? 'crosshair on' : 'crosshair'} />}
+      {touchOn && !chatWith && <TouchControls touchRef={touchRef} onPause={() => setTouch(false)} />}
+      {playing && !chatWith && aimed && (
+        <button className="talkhint" onClick={() => chat.open(aimed)}>
+          {touchOn ? 'Tap here' : 'Click'} to chat with Prof. {PROFS[aimed].name.split(' ').slice(-1)[0]}
+        </button>
+      )}
+      {chatWith && <ChatPanel prof={PROFS[chatWith]} onClose={closeChat} />}
 
-      {!playing && (
+      {!playing && !chatWith && (
         <div className="overlay" onClick={() => (isTouch ? setTouch(true) : lockRef.current?.())}>
           <div className="card">
             <div className="kicker">Yale SOM · Evans Hall</div>
